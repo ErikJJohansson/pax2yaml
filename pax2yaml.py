@@ -53,44 +53,23 @@ def read_from_plc(plc, tag_list):
     '''
     reads data from plc, returns list of tuples (tag_name, tag_value)
     '''
-    
-    result = tag_data = plc.read(*tag_list)
 
-    # tuple of tag name, data
-    tag_data_formatted = []
+    result = plc.read(*tag_list)
 
-    # hardcoded but it works
-    for s in tag_data:
-        if s[2] == 'BOOL':
-            data = int(s[1])
-        elif s[2] == 'REAL':
-            if 'e' in str(s[1]):
-                data = float(format(s[1],'.6e'))
-            elif s[1].is_integer():
-                data = int(s[1])
-            else:
-                data = float(format(s[1], '.6f'))                  
-        else:
-            data = s[1]
-
-        tag_data_formatted.append({s[0]:data})
+    # List comprehension to format tag data
+    tag_data_formatted = [{s[0]: int(s[1]) if s[2] == 'BOOL' else
+                           float(format(s[1], '.6e')) if s[2] == 'REAL' and 'e' in str(s[1]) else
+                           int(s[1]) if s[2] == 'REAL' and s[1].is_integer() else
+                           float(format(s[1], '.6f')) if s[2] == 'REAL' else
+                           s[1]} for s in result]
 
     return tag_data_formatted, result
 
-def merge_dictionaries(list_of_dicts):
-    merged_dict = {}
-    for dictionary in list_of_dicts:
-        merged_dict.update(dictionary)
-    return merged_dict
-
-def remove_part_from_keys(dictionary, part_to_remove):
-    modified_dict = {}
-    for key, value in dictionary.items():
-        modified_key = key.replace(part_to_remove, '')
-        modified_dict[modified_key] = value
-    return modified_dict
-
 def combine_and_modify_dicts(list_of_dicts, part_to_remove):
+    '''
+    Written by the GOAT GPT
+    Combines a list of dictionaries and removes a string from the keys
+    '''
     combined_dict = {}
     for dictionary in list_of_dicts:
         combined_dict.update(dictionary)
@@ -98,22 +77,19 @@ def combine_and_modify_dicts(list_of_dicts, part_to_remove):
     modified_dict = {key.replace(part_to_remove, ''): value for key, value in combined_dict.items()}
     return modified_dict
 
-def save_as_yaml(data, subfolder, filename):
-    os.makedirs(subfolder, exist_ok=True)  # Create the subfolder if it doesn't exist
-    filepath = os.path.join(subfolder, filename)
+def save_as_yaml(data, folder1, folder2, filename):
+    # Create the nested subfolders if they don't exist
+    os.makedirs(os.path.join(folder1, folder2), exist_ok=True)  
+    filepath = os.path.join(folder1, folder2, filename)
     with open(filepath, 'w') as f:
-        yaml.safe_dump(data, f)
+        yaml.dump(data, f)
 
-'''
-Make YAML of Tag Data
-'''
+
 def make_yaml_for_tag(plc,tag_type,base_tag):
-
+    '''
+    Make YAML of Tag Data
+    '''
     tag_dict = {}
-    data_dict = {}
-
-    #tag_dict['Name'] = base_tag
-    #tag_dict['Type'] = tag_type
 
     # loop through each key in structure
     for yaml_key in AOI_CONFIG[tag_type]:
@@ -125,25 +101,12 @@ def make_yaml_for_tag(plc,tag_type,base_tag):
         tag_data, result = read_from_plc(plc,tags_to_read)
 
         # strip out
+        #print(tag_data_formatted)
         tag_data_formatted = combine_and_modify_dicts(tag_data,base_tag + '.')
 
         tag_dict[yaml_key] = tag_data_formatted
 
     return tag_dict
-
-'''
-    sts_tags_to_read = make_tag_list(base_tag,AOI_STS[tag_type])
-
-    sts_tag_data, result = read_from_plc(plc,sts_tags_to_read)
-
-    sts_tag_data_formatted = combine_and_modify_dicts(sts_tag_data,base_tag + '.')
-
-    tag_dict['Status'] = sts_tag_data_formatted
-'''
-
-
-    # read data from PLC
-
 
 def main():
     
@@ -220,7 +183,7 @@ def main():
                     tag_data_yaml = make_yaml_for_tag(plc,aoi,base_tags[i])
 
                     # save to file
-                    save_as_yaml(tag_data_yaml,aoi,base_tags[i] + '.yml')
+                    save_as_yaml(tag_data_yaml,plc_name,aoi,base_tags[i] + '.yml')
 
                     # add to failed tags list if we can't find the tag
                     #if not all(read_result):
@@ -232,43 +195,5 @@ def main():
             else:
                 print("No instances of " + aoi + " found in " + plc_name + " PLC.")
 
-'''
-    test_tag_type = 'P_DIn'
-    test_sub_tags = AOI_CONFIG['P_DIn']['Status']
-    instance_list = get_aoi_tag_instances(plc,test_tag_type)
-    print(test_sub_tags)
-
-    for tag in instance_list:
-
-        # make yaml file
-        tag_data_yaml = make_yaml_for_tag(plc,test_tag_type,tag)
-
-        # debug
-        #print(yaml.dump(tag_yaml))
-
-        # save to file
-        save_as_yaml(tag_data_yaml,test_tag_type,tag + '.yml')
-'''
 if __name__ == "__main__":
     main()
-
-
-'''
-    subfolder_name = "AOI_Templates"
-
-    # Get the current directory of the script
-    current_directory = os.path.dirname(os.path.abspath(__file__))
-
-    # Define the path to your Jinja2 template file relative to the current directory
-    template_file = os.path.join(current_directory, subfolder_name, testtemplate_name)
-
-    # Initialize Jinja2 environment
-    env = Environment(loader=FileSystemLoader(os.path.join(current_directory, subfolder_name)))
-
-    # Load the template
-    template = env.get_template(testtemplate_name)
-
-    #tag_list = make_tag_list(instance_list[0],AOI_definitions.get_tags_for_aoi('P_DIn'))
-
-
-'''
