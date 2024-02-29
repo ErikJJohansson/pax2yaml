@@ -4,7 +4,7 @@ import yaml
 from tqdm import trange, tqdm
 from itertools import product
 import argparse
-from jinja2 import Environment, FileSystemLoader
+from collections import OrderedDict
 import os
 from AOI_definitions import AOI_CONFIG
 
@@ -54,16 +54,19 @@ def read_from_plc(plc, tag_list):
     reads data from plc, returns list of tuples (tag_name, tag_value)
     '''
 
-    result = plc.read(*tag_list)
+    if len(tag_list) == 1:  # If only one tag is provided
+        tag_data = [plc.read(tag_list[0])]  # Wrap the single tag in a list
+    else:
+        tag_data = plc.read(*tag_list)
 
     # List comprehension to format tag data
     tag_data_formatted = [{s[0]: int(s[1]) if s[2] == 'BOOL' else
                            float(format(s[1], '.6e')) if s[2] == 'REAL' and 'e' in str(s[1]) else
                            int(s[1]) if s[2] == 'REAL' and s[1].is_integer() else
                            float(format(s[1], '.6f')) if s[2] == 'REAL' else
-                           s[1]} for s in result]
+                           s[1]} for s in tag_data]
 
-    return tag_data_formatted, result
+    return tag_data_formatted
 
 def combine_and_modify_dicts(list_of_dicts, part_to_remove):
     '''
@@ -75,6 +78,7 @@ def combine_and_modify_dicts(list_of_dicts, part_to_remove):
         combined_dict.update(dictionary)
     
     modified_dict = {key.replace(part_to_remove, ''): value for key, value in combined_dict.items()}
+    
     return modified_dict
 
 def save_as_yaml(data, folder1, folder2, filename):
@@ -82,7 +86,7 @@ def save_as_yaml(data, folder1, folder2, filename):
     os.makedirs(os.path.join(folder1, folder2), exist_ok=True)  
     filepath = os.path.join(folder1, folder2, filename)
     with open(filepath, 'w') as f:
-        yaml.dump(data, f)
+        yaml.dump(data, f, default_flow_style=False, sort_keys=False)
 
 
 def make_yaml_for_tag(plc,tag_type,base_tag):
@@ -91,6 +95,8 @@ def make_yaml_for_tag(plc,tag_type,base_tag):
     '''
     tag_dict = {}
 
+    tag_dict['AOI'] = tag_type
+
     # loop through each key in structure
     for yaml_key in AOI_CONFIG[tag_type]:
 
@@ -98,7 +104,7 @@ def make_yaml_for_tag(plc,tag_type,base_tag):
         tags_to_read = make_tag_list(base_tag,AOI_CONFIG[tag_type][yaml_key])
 
         # read tag data from PLC
-        tag_data, result = read_from_plc(plc,tags_to_read)
+        tag_data = read_from_plc(plc,tags_to_read)
 
         # strip out
         #print(tag_data_formatted)
@@ -112,10 +118,10 @@ def main():
     
     # Parse arguments
 
-    default_yamlfile = ''
+    default_directory = ''
    
     parser = argparse.ArgumentParser(
-        description='Python-based PlantPAX tag configuration tool.',
+        description='Python-based PlantPAX tag to YAML converter.',
         epilog='This tool works on both Windows and Mac.')
     
     # Add command-line arguments
@@ -124,17 +130,17 @@ def main():
 
     # parsing read commands, filename is optional and will default to default_yamfile value
     read_parser = subparsers.add_parser('read', help='Read tags from PLC into spreadsheet')
-    read_parser.add_argument('yamlfile', nargs='?', default=default_yamlfile,help='Path to excel file')
+    read_parser.add_argument('directory', nargs='?', default=default_directory,help='Path to excel file')
 
     # parsing write commands, yamlfile is required
     write_parser = subparsers.add_parser('write', help='Write data from yaml into PLC tags')
-    write_parser.add_argument('yamlfile',help='Path to yaml file')
+    write_parser.add_argument('directory',help='Path to yaml file')
                                        
     args = parser.parse_args()
 
     # Access the parsed arguments
     commpath = args.commpath
-    yamlfile = args.yamlfile
+    yamldirectory = args.directory
     mode = args.mode
 
     # open connection to PLC
@@ -183,7 +189,7 @@ def main():
                     tag_data_yaml = make_yaml_for_tag(plc,aoi,base_tags[i])
 
                     # save to file
-                    save_as_yaml(tag_data_yaml,plc_name,aoi,base_tags[i] + '.yml')
+                    save_as_yaml(tag_data_yaml,yamldirectory,"TagData_" + plc_name,base_tags[i] + '.yml')
 
                     # add to failed tags list if we can't find the tag
                     #if not all(read_result):
