@@ -189,7 +189,7 @@ def main():
                     tag_data_yaml = make_yaml_for_tag(plc,aoi,base_tags[i])
 
                     # save to file
-                    save_as_yaml(tag_data_yaml,yamldirectory,"TagData_" + plc_name,base_tags[i] + '.yml')
+                    save_as_yaml(tag_data_yaml,yamldirectory,"TagData_Mark4",base_tags[i] + '.yml')
 
                     # add to failed tags list if we can't find the tag
                     #if not all(read_result):
